@@ -2,11 +2,7 @@ import Queue from 'bull';
 import { natsWrapper } from '../nats-wrapper';
 import { ProductSyncCompletePublisher } from '../events/publishers/product-sync-complete-publisher';
 import axios from 'axios';
-import {
-  ProductSyncFetchError,
-  ProductSyncPostError,
-  ProductSyncVersionError,
-} from '@phill-sdk/common';
+import { ProductSyncFetchError, ProductSyncPostError } from '@phill-sdk/common';
 
 interface Payload {
   id: string;
@@ -22,37 +18,41 @@ const productSyncQueue = new Queue<Payload>('product:create', {
   },
 });
 
-productSyncQueue.process(async (job) => {
-  const postData = () => {
-    axios
-      .post(`${process.env.SUPPLY_CHAIN_URL}/supply-chain`, job.data)
-      .then(() => {
-        new ProductSyncCompletePublisher(natsWrapper.client).publish({
-          id: job.data.id,
-          version: job.data.version,
-        });
-      })
-      .catch((e) => {
-        throw new ProductSyncPostError();
-      });
-  };
+productSyncQueue.process(
+  async (job) =>
+    new Promise((resolve, reject) => {
+      console.log('Started processing job');
+      console.log(job.data);
+      const postData = () => {
+        axios
+          .post(`${process.env.SUPPLY_CHAIN_URL}/supply-chain`, job.data)
+          .then(() => {
+            new ProductSyncCompletePublisher(natsWrapper.client).publish({
+              id: job.data.id,
+              version: job.data.version,
+            });
+            resolve();
+          })
+          .catch((e) => {
+            reject(new ProductSyncPostError());
+          });
+      };
 
-  if (job.data.version === 0) {
-    postData();
-  } else {
-    axios
-      .get(`${process.env.SUPPLY_CHAIN_URL}/supply-chain/${job.data.id}`)
-      .then(({ data: { version } }) => {
-        if (version !== job.data.version - 1) {
-          throw new ProductSyncVersionError();
-        } else {
-          postData();
-        }
-      })
-      .catch((e) => {
-        throw new ProductSyncFetchError();
-      });
-  }
-});
+      if (job.data.version === 0) {
+        return postData();
+      }
+
+      axios
+        .get(`${process.env.SUPPLY_CHAIN_URL}/supply-chain/${job.data.id}`)
+        .then(({ data: { version } }) => {
+          if (version < job.data.version) {
+            postData();
+          }
+        })
+        .catch((e) => {
+          reject(new ProductSyncFetchError());
+        });
+    })
+);
 
 export { productSyncQueue };
