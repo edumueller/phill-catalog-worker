@@ -1,4 +1,5 @@
 import { ProductCreatedListener } from './events/listeners/product-created-listener';
+import { ProductUpdatedListener } from './events/listeners/product-updated-listener';
 import { natsWrapper } from './nats-wrapper';
 
 const start = async () => {
@@ -29,6 +30,7 @@ const start = async () => {
     process.on('SIGTERM', () => natsWrapper.client.close());
 
     new ProductCreatedListener(natsWrapper.client).listen();
+    new ProductUpdatedListener(natsWrapper.client).listen();
   } catch (err) {
     console.error(err);
   }
