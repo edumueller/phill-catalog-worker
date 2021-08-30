@@ -15,6 +15,9 @@ const start = async () => {
   if (!process.env.SUPPLY_CHAIN_URL) {
     throw new Error('SUPPLY_CHAIN_URL must be defined');
   }
+  if (!process.env.REDIS_HOST) {
+    throw new Error('REDIS_HOST must be defined');
+  }
 
   try {
     await natsWrapper.connect(
